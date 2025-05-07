@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Joint Angle Analysis</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  </head>
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1>Joint Angle Analysis</h1>
+            <p class="subtitle">Real-time analysis of human joint angles using MediaPipe</p>
+        </header>
+
+        <div class="upload-section">
+            <div class="upload-container">
+                <div class="upload-area" id="dropZone">
+                    <img src="/api/placeholder/64/64" alt="Upload Icon" class="upload-icon">
+                    <h3>Upload Video</h3>
+                    <p>Drag & drop or click to browse</p>
+                    <input type="file" id="videoUpload" accept="video/*" hidden>
+                </div>
+                <div class="upload-options">
+                    <div class="option">
+                        <input type="checkbox" id="skeletonMode" class="toggle">
+                        <label for="skeletonMode">Skeleton Mode</label>
+                    </div>
+                    <div class="option">
+                        <input type="checkbox" id="saveData" class="toggle">
+                        <label for="saveData">Save Data</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-section hidden" id="analysisSection">
+            <div class="video-container">
+                <div class="video-wrapper">
+                    <video id="videoPlayer" controls></video>
+                    <canvas id="overlayCanvas"></canvas>
+                    <div class="video-controls">
+                        <button id="playPauseBtn" class="control-btn">
+                            <span class="play-icon">▶</span>
+                            <span class="pause-icon hidden">⏸</span>
+                        </button>
+                        <input type="range" id="videoProgress" min="0" max="100" value="0">
+                        <span id="timeDisplay">00:00 / 00:00</span>
+                    </div>
+                </div>
+                <div class="analysis-controls">
+                    <button id="startAnalysisBtn" class="primary-btn">Start Analysis</button>
+                    <button id="resetBtn" class="secondary-btn">Reset</button>
+                    <button id="downloadDataBtn" class="secondary-btn">Download Data</button>
+                </div>
+            </div>
+
+            <div class="data-container">
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="table">Data Table</button>
+                    <button class="tab-btn" data-tab="chart">Charts</button>
+                    <button class="tab-btn" data-tab="summary">Summary</button>
+                </div>
+                
+                <div class="tab-content">
+                    <div id="tableTab" class="tab-pane active">
+                        <div class="data-table-container">
+                            <div class="angle-selector">
+                                <label for="jointSelect">Select Joint:</label>
+                                <select id="jointSelect">
+                                    <option value="all">All Joints</option>
+                                    <option value="leftElbow">Left Elbow</option>
+                                    <option value="rightElbow">Right Elbow</option>
+                                    <option value="leftShoulder">Left Shoulder</option>
+                                    <option value="rightShoulder">Right Shoulder</option>
+                                    <option value="leftKnee">Left Knee</option>
+                                    <option value="rightKnee">Right Knee</option>
+                                </select>
+                            </div>
+                            <table id="angleDataTable" class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Time (s)</th>
+                                        <th>Left Elbow (°)</th>
+                                        <th>Right Elbow (°)</th>
+                                        <th>Left Shoulder (°)</th>
+                                        <th>Right Shoulder (°)</th>
+                                        <th>Left Knee (°)</th>
+                                        <th>Right Knee (°)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="angleDataBody">
+                                    <!-- Data rows will be inserted here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div id="chartTab" class="tab-pane">
+                        <div class="chart-controls">
+                            <div class="chart-selector">
+                                <label for="chartJointSelect">Joint:</label>
+                                <select id="chartJointSelect">
+                                    <option value="leftElbow">Left Elbow</option>
+                                    <option value="rightElbow">Right Elbow</option>
+                                    <option value="leftShoulder">Left Shoulder</option>
+                                    <option value="rightShoulder">Right Shoulder</option>
+                                    <option value="leftKnee">Left Knee</option>
+                                    <option value="rightKnee">Right Knee</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="angleChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div id="summaryTab" class="tab-pane">
+                        <div class="summary-container">
+                            <h3>Maximum Angles Reached</h3>
+                            <div class="max-angles-grid">
+                                <div class="max-angle-card" id="leftElbowMax">
+                                    <h4>Left Elbow</h4>
+                                    <div class="angle-value">--°</div>
+                                    <div class="timestamp">Time: --:--</div>
+                                </div>
+                                <div class="max-angle-card" id="rightElbowMax">
+                                    <h4>Right Elbow</h4>
+                                    <div class="angle-value">--°</div>
+                                    <div class="timestamp">Time: --:--</div>
+                                </div>
+                                <div class="max-angle-card" id="leftShoulderMax">
+                                    <h4>Left Shoulder</h4>
+                                    <div class="angle-value">--°</div>
+                                    <div class="timestamp">Time: --:--</div>
+                                </div>
+                                <div class="max-angle-card" id="rightShoulderMax">
+                                    <h4>Right Shoulder</h4>
+                                    <div class="angle-value">--°</div>
+                                    <div class="timestamp">Time: --:--</div>
+                                </div>
+                                <div class="max-angle-card" id="leftKneeMax">
+                                    <h4>Left Knee</h4>
+                                    <div class="angle-value">--°</div>
+                                    <div class="timestamp">Time: --:--</div>
+                                </div>
+                                <div class="max-angle-card" id="rightKneeMax">
+                                    <h4>Right Knee</h4>
+                                    <div class="angle-value">--°</div>
+                                    <div class="timestamp">Time: --:--</div>
+                                </div>
+                            </div>
+
+                            <div class="session-stats">
+                                <h3>Session Statistics</h3>
+                                <ul class="stats-list">
+                                    <li>Analysis Duration: <span id="analysisDuration">--:--</span></li>
+                                    <li>Frames Analyzed: <span id="framesAnalyzed">0</span></li>
+                                    <li>Average Processing Time: <span id="avgProcessingTime">-- ms</span></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="loading-overlay hidden" id="loadingOverlay">
+            <div class="spinner"></div>
+            <p>Processing video...</p>
+        </div>
+
+        <div class="notification" id="notification">
+            <p id="notificationMessage"></p>
+        </div>
+    </div>
+
+    <footer>
+        <p>Joint Angle Analysis Tool © 2025. All rights reserved.</p>
+    </footer>
+    
+    <script src="/static/js/script.js"></script>
+</body>
+</html>
